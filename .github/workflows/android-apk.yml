@@ -1,4 +1,4 @@
-name: Build Multi AI APK
+name: Build VoiceMate APK
 
 on:
   workflow_dispatch:
@@ -9,9 +9,15 @@ on:
 permissions:
   contents: read
 
+# একই ব্রাঞ্চে নতুন রান এলে পুরনোটা বাতিল হবে
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout source
@@ -23,19 +29,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # এই অ্যাকশন নিজেই SDK লাইসেন্স accept করে, আলাদা ধাপ লাগে না
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
-        shell: bash
-        run: |
-          set +o pipefail
-          yes | sdkmanager --licenses
-          result=${PIPESTATUS[1]}
-          if [ "$result" -ne 0 ]; then
-            echo "Android SDK license acceptance failed"
-            exit "$result"
-          fi
 
       - name: Install Android SDK packages
         run: |
@@ -51,17 +47,23 @@ jobs:
 
       - name: Check project files
         run: |
-          echo "Checking Gradle project files..."
           test -f settings.gradle.kts || test -f settings.gradle
           test -f app/build.gradle.kts || test -f app/build.gradle
 
+      # gradlew থাকলে সেটা, না থাকলে ইনস্টল করা Gradle ব্যবহার হবে
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MultiAI-debug-apk
+          name: VoiceMate-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
